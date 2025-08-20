@@ -1,0 +1,101 @@
+set(HT_CURL [===[@HT_CURL@]===])
+
+set(HT_ENDPOINT [===[@HT_ENDPOINT@]===])
+set(HT_USER [===[@HT_USER@]===])
+set(HT_SECRET [===[@HT_SECRET@]===])
+set(HT_SIGNING_PROFILE [===[@HT_SIGNING_PROFILE@]===])
+
+set(HT_DEFAULT_URL [===[@HT_DEFAULT_URL@]===])
+set(HT_DEFAULT_DESCRIPTION [===[@HT_DEFAULT_DESCRIPTION@]===])
+
+set(HT_ITEMS [===[@HT_ITEMS@]===])
+
+set(HT_SCRATCH [===[@HT_SCRATCH@]===])
+
+file(GLOB_RECURSE PACKAGE_FILES
+    LIST_DIRECTORIES false
+    RELATIVE "${CPACK_TEMPORARY_DIRECTORY}"
+    "${CPACK_TEMPORARY_DIRECTORY}/*"
+)
+
+set(COMMAND_BASE
+    "${HT_CURL}" "${HT_ENDPOINT}"
+        --user "${HT_USER}:${HT_SECRET}"
+        --url-query "signing-profile=${HT_SIGNING_PROFILE}"
+        --max-time 300
+        --fail-with-body
+)
+
+set(SIGN_COUNTER 0)
+
+function(semicolon_safe_append list)
+    foreach(value IN LISTS ARGN)
+        string(REPLACE ";" "\\;" value "${value}")
+        list(APPEND "${list}" "${value}")
+    endforeach()
+    set("${list}" "${${list}}" PARENT_SCOPE)
+endfunction()
+
+foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
+    set(REMAINING_ITEMS "${HT_ITEMS}")
+    while(REMAINING_ITEMS)
+        list(POP_FRONT REMAINING_ITEMS re description url)
+        if(MATCH_PATH MATCHES "${re}")
+            if("${description}" STREQUAL "")
+                set(description ${HT_DEFAULT_DESCRIPTION})
+            endif()
+
+            if("${url}" STREQUAL "")
+                set(url ${HT_DEFAULT_URL})
+            endif()
+
+            cmake_path(GET MATCH_PATH FILENAME FILENAME)
+            cmake_path(APPEND FULL_PATH "${CPACK_TEMPORARY_DIRECTORY}" "${MATCH_PATH}")
+
+            cmake_path(APPEND TEMPORARY "${HT_SCRATCH}" ${SIGN_COUNTER})
+            file(REMOVE "${TEMPORARY}")
+
+            math(EXPR SIGN_COUNTER "${SIGN_COUNTER}+1")
+
+            set(SIGN_COMMAND
+                ${COMMAND_BASE}
+                --data-binary "@${FULL_PATH}"
+                --output "${TEMPORARY}"
+                --header "content-disposition: attachment\\; filename=\"${FILENAME}\""
+            )
+
+            if(NOT "${description}" STREQUAL "")
+                string(REPLACE ";" "\;" description "${description}")
+                list(APPEND SIGN_COMMAND --url-query "description=${description}")
+            endif()
+
+            if(NOT "${url}" STREQUAL "")
+                string(REPLACE ";" "\;" url "${url}")
+                list(APPEND SIGN_COMMAND --url-query "url=${url}")
+            endif()
+
+            execute_process(
+                COMMAND ${SIGN_COMMAND}
+                RESULT_VARIABLE signresult
+            )
+
+            if(signresult)
+                message(WARNING "Error while signing")
+
+                string(REPLACE "${HT_SECRET}" "redacted" DISPLAY_COMMAND "${SIGN_COMMAND}")
+                message(WARNING "Command: ${DISPLAY_COMMAND}")
+
+                file(SIZE "${TEMPORARY}" output_size)
+                if(${output_size} LESS_EQUAL 1024)
+                    file(READ "${TEMPORARY}" output)
+                    message(WARNING "${output}")
+                else()
+                    message(WARNING "Output too big to display. Maybe received partial response?")
+                endif()
+            else()
+                # Success
+                file(RENAME "${TEMPORARY}" "${FULL_PATH}")
+            endif()
+        endif()
+    endwhile()
+endforeach()
