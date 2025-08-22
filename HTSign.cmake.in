@@ -28,14 +28,6 @@ set(COMMAND_BASE
 
 set(SIGN_COUNTER 0)
 
-function(semicolon_safe_append list)
-    foreach(value IN LISTS ARGN)
-        string(REPLACE ";" "\\;" value "${value}")
-        list(APPEND "${list}" "${value}")
-    endforeach()
-    set("${list}" "${${list}}" PARENT_SCOPE)
-endfunction()
-
 foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
     set(REMAINING_ITEMS "${HT_ITEMS}")
     while(REMAINING_ITEMS)
@@ -74,6 +66,8 @@ foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
                 list(APPEND SIGN_COMMAND --url-query "url=${url}")
             endif()
 
+            message(STATUS "Requesting signature for ${MATCH_PATH}")
+
             execute_process(
                 COMMAND ${SIGN_COMMAND}
                 RESULT_VARIABLE signresult
@@ -93,7 +87,8 @@ foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
                     message(WARNING "Output too big to display. Maybe received partial response?")
                 endif()
             else()
-                # Success
+                message(STATUS "Success")
+                message(STATUS "Moving ${TEMPORARY} to ${FULL_PATH}")
                 file(RENAME "${TEMPORARY}" "${FULL_PATH}")
             endif()
         endif()
