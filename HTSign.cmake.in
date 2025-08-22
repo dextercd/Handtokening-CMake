@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.21)
+
 set(HT_CURL [===[@HT_CURL@]===])
 
 set(HT_ENDPOINT [===[@HT_ENDPOINT@]===])
