@@ -93,6 +93,8 @@ foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
                 message(STATUS "Moving ${TEMPORARY} to ${FULL_PATH}")
                 file(RENAME "${TEMPORARY}" "${FULL_PATH}")
             endif()
+
+            break()
         endif()
     endwhile()
 endforeach()
