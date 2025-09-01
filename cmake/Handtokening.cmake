@@ -7,7 +7,19 @@ if(NOT HT_DEFAULT_URL)
 endif()
 
 # Need curl to send/receive the (un)signed programs
-find_program(HT_CURL curl REQUIRED)
+find_package(HT_CURL 8.3.0 REQUIRED)
+
+# If osslsigncode or signtool is installed, we can just download the PKCS #7
+# signature file and add it to the program instead of transferring the full
+# signed program.
+find_package(HT_OSSLSIGNCODE 2.0)
+if(NOT HT_OSSLSIGNCODE_FOUND)
+    # https://vcsjones.dev/custom-authenticode-signing/
+    # > Starting in the Windows 10 SDK, two new command line switches are available, dg and di.
+    #
+    # Well, hopefully that just means any version >= 10. ¯\_(ツ)_/¯
+    find_package(HT_SIGNTOOL 10)
+endif()
 
 set(HT_ENDPOINT "$ENV{HT_ENDPOINT}" CACHE STRING "URL to submit signing requests to. This normally ends in /api/sign.")
 set(HT_USER "$ENV{HT_USER}" CACHE STRING "Username to use for signing authentication.")
@@ -73,6 +85,7 @@ endif()
 
 set(HTPATH "${CMAKE_CURRENT_BINARY_DIR}/HTSign.cmake")
 set(HT_SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/HTScratch")
+set(HT_PLACEHOLDER_CERT "${Handtokening_CMake_SOURCE_DIR}/placeholder.cer")
 file(MAKE_DIRECTORY ${HT_SCRATCH})
 
 configure_file(${Handtokening_CMake_SOURCE_DIR}/HTSign.cmake.in ${HTPATH} @ONLY)

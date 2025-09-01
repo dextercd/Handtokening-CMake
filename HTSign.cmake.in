@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.21)
 
 set(HT_CURL [===[@HT_CURL@]===])
+set(HT_OSSLSIGNCODE [===[@HT_OSSLSIGNCODE@]===])
+set(HT_SIGNTOOL [===[@HT_SIGNTOOL@]===])
+
+set(HT_PLACEHOLDER_CERT [===[@HT_PLACEHOLDER_CERT@]===])
 
 set(HT_ENDPOINT [===[@HT_ENDPOINT@]===])
 set(HT_USER [===[@HT_USER@]===])
@@ -28,7 +32,10 @@ set(COMMAND_BASE
         --fail-with-body
 )
 
-set(SIGN_COUNTER 0)
+if(HT_OSSLSIGNCODE OR HT_SIGNTOOL)
+    message(STATUS "Handtokening: Using PKCS #7 response mode")
+    list(APPEND COMMAND_BASE --url-query response-type=pkcs7)
+endif()
 
 foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
     set(REMAINING_ITEMS "${HT_ITEMS}")
@@ -46,10 +53,13 @@ foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
             cmake_path(GET MATCH_PATH FILENAME FILENAME)
             cmake_path(APPEND FULL_PATH "${CPACK_TEMPORARY_DIRECTORY}" "${MATCH_PATH}")
 
-            cmake_path(APPEND TEMPORARY "${HT_SCRATCH}" ${SIGN_COUNTER})
-            file(REMOVE "${TEMPORARY}")
+            if(HT_OSSLSIGNCODE OR HT_SIGNTOOL)
+                cmake_path(APPEND TEMPORARY "${HT_SCRATCH}" "${FILENAME}.p7u")
+            else()
+                cmake_path(APPEND TEMPORARY "${HT_SCRATCH}" "${FILENAME}")
+            endif()
 
-            math(EXPR SIGN_COUNTER "${SIGN_COUNTER}+1")
+            file(REMOVE "${TEMPORARY}")
 
             set(SIGN_COMMAND
                 ${COMMAND_BASE}
@@ -57,6 +67,12 @@ foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
                 --output "${TEMPORARY}"
                 --header "content-disposition: attachment\\; filename=\"${FILENAME}\""
             )
+
+            if(HT_SIGNTOOL)
+                cmake_path(APPEND SIGFILE "${HT_SCRATCH}" "${FILENAME}.dig.signed")
+                list(APPEND SIGN_COMMAND -w "%output{${SIGFILE}}%header{ht-signed}")
+                file(REMOVE "${SIGFILE}")
+            endif()
 
             if(NOT "${description}" STREQUAL "")
                 string(REPLACE ";" "\;" description "${description}")
@@ -75,7 +91,7 @@ foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
                 RESULT_VARIABLE signresult
             )
 
-            if(signresult)
+            if(NOT signresult EQUAL 0)
                 message(WARNING "Error while signing")
 
                 string(REPLACE "${HT_SECRET}" "redacted" DISPLAY_COMMAND "${SIGN_COMMAND}")
@@ -89,9 +105,65 @@ foreach(MATCH_PATH IN LISTS PACKAGE_FILES)
                     message(WARNING "Output too big to display. Maybe received partial response?")
                 endif()
             else()
-                message(STATUS "Success")
-                message(STATUS "Moving ${TEMPORARY} to ${FULL_PATH}")
-                file(RENAME "${TEMPORARY}" "${FULL_PATH}")
+                message(STATUS "Handtokening server success response")
+
+                if(HT_OSSLSIGNCODE)
+                    file(REMOVE "${FULL_PATH}.signed")
+                    execute_process(
+                        COMMAND ${HT_OSSLSIGNCODE} attach-signature
+                            -sigin "${TEMPORARY}"
+                            -in "${FULL_PATH}" -out "${FULL_PATH}.signed"
+                        COMMAND_ECHO STDERR
+                        RESULT_VARIABLE osslsigncode_result
+                        OUTPUT_VARIABLE osslsigncode_output
+                        ERROR_VARIABLE osslsigncode_error
+                    )
+
+                    if(osslsigncode_result EQUAL 0 OR osslsigncode_error MATCHES "Signature mismatch")
+                        # Success. Might have a signature mismatch error if the
+                        # certificate can't be validated.
+                        file(RENAME "${FULL_PATH}.signed" "${FULL_PATH}")
+                    else()
+                        message(SEND_ERROR "osslsigncode error: ${osslsigncode_error}")
+                    endif()
+                elseif(HT_SIGNTOOL)
+                    # For some reason, signtool can't simply attach the p7u
+                    # file to the program. The program first needs a p7u file
+                    # attached which can then be replaced.
+                    #
+                    # If this isn't done, the following error is returned:
+                    # SignTool Error: SignedCode::Sign returned error: 0x80070057
+
+                    # Add placeholder p7u via /dg option
+                    file(MAKE_DIRECTORY "${HT_SCRATCH}/st")
+                    execute_process(
+                        COMMAND ${HT_SIGNTOOL} sign /dg "${HT_SCRATCH}/st" /fd sha256 /f "${HT_PLACEHOLDER_CERT}" "${FULL_PATH}"
+                        COMMAND_ECHO STDERR
+                        RESULT_VARIABLE placeholder_result
+                        OUTPUT_VARIABLE placeholder_output
+                        ERROR_VARIABLE placeholder_error
+                    )
+                    if(NOT placeholder_result EQUAL 0)
+                        message(SEND_ERROR "signtool add placeholder error: ${placeholder_error}")
+                        break()
+                    endif()
+                    execute_process(
+                        COMMAND ${HT_SIGNTOOL} sign /di "${HT_SCRATCH}" "${FULL_PATH}"
+                        COMMAND_ECHO STDERR
+                        RESULT_VARIABLE signtool_result
+                        OUTPUT_VARIABLE signtool_output
+                        ERROR_VARIABLE signtool_error
+                    )
+                    if(signtool_result EQUAL 0)
+                        file(REMOVE "${TEMPORARY}")
+                        file(REMOVE "${SIGFILE}")
+                    else()
+                        message(SEND_ERROR "signtool error: ${signtool_error}")
+                    endif()
+                else()
+                    message(STATUS "Moving ${TEMPORARY} to ${FULL_PATH}")
+                    file(RENAME "${TEMPORARY}" "${FULL_PATH}")
+                endif()
             endif()
 
             break()
