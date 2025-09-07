@@ -22,8 +22,8 @@ if(NOT HT_OSSLSIGNCODE_FOUND)
 endif()
 
 set(HT_ENDPOINT "$ENV{HT_ENDPOINT}" CACHE STRING "URL to submit signing requests to. This normally ends in /api/sign.")
-set(HT_USER "$ENV{HT_USER}" CACHE STRING "Username to use for signing authentication.")
-set(HT_SECRET "$ENV{HT_SECRET}" CACHE STRING "Password/API key/secret to use for authentication.")
+set(HT_USER "$ENV{HT_USER}" CACHE STRING "Client name to authenticate as.")
+set(HT_SECRET "$ENV{HT_SECRET}" CACHE STRING "API secret to use for authentication.")
 set(HT_SIGNING_PROFILE "$ENV{HT_SIGNING_PROFILE}" CACHE STRING "What signing profile to use.")
 
 set(HT_FIELD_NAMES description url)
