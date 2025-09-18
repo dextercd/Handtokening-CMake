@@ -13,6 +13,7 @@ find_package(HT_CURL 8.3.0 REQUIRED)
 # signature file and add it to the program instead of transferring the full
 # signed program.
 find_package(HT_OSSLSIGNCODE 2.0)
+
 if(NOT HT_OSSLSIGNCODE_FOUND)
     # https://vcsjones.dev/custom-authenticode-signing/
     # > Starting in the Windows 10 SDK, two new command line switches are available, dg and di.
