@@ -27,6 +27,13 @@ set(HT_USER "$ENV{HT_USER}" CACHE STRING "Client name to authenticate as.")
 set(HT_SECRET "$ENV{HT_SECRET}" CACHE STRING "API secret to use for authentication.")
 set(HT_SIGNING_PROFILE "$ENV{HT_SIGNING_PROFILE}" CACHE STRING "What signing profile to use.")
 
+set(HT_STOP_ON_ERROR_DEFAULT ON)
+if(NOT "$ENV{HT_STOP_ON_ERROR}" STREQUAL "")
+    set(HT_STOP_ON_ERROR_DEFAULT "$ENV{HT_STOP_ON_ERROR}")
+endif()
+
+set(HT_STOP_ON_ERROR "${HT_STOP_ON_ERROR_DEFAULT}" CACHE BOOL "Whether or not a failure to sign a file should result in a fatal error.")
+
 set(HT_FIELD_NAMES description url)
 
 function(ht_clear_parts)
@@ -87,6 +94,7 @@ endif()
 set(HTPATH "${CMAKE_CURRENT_BINARY_DIR}/HTSign.cmake")
 set(HT_SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/HTScratch")
 set(HT_PLACEHOLDER_CERT "${Handtokening_CMake_SOURCE_DIR}/placeholder.cer")
+
 file(MAKE_DIRECTORY ${HT_SCRATCH})
 
 configure_file(${Handtokening_CMake_SOURCE_DIR}/HTSign.cmake.in ${HTPATH} @ONLY)
